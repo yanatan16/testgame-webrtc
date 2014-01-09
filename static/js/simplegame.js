@@ -16,7 +16,10 @@ $(function () {
   var game
 
   rtc.connect('ws://' + host + ':8000', 'testroom')
-  console.log('made websocket connection')
+
+  rtc.on('connect', function () {
+    console.log('made websocket connection')
+  })
 
   rtc.on('connections', function (conns) {
     console.log('got connections', conns)
