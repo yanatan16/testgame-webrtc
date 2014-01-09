@@ -11,8 +11,11 @@
   "dependencies": {
     "express": "~3.4.7",
     "webrtc.io": "0.0.4",
-    "webrtc.io-client": "0.0.2-3",
-    "enchilada": "~0.7.1"
+    "webrtc.io-client": "git+https://github.com/yanatan16/webrtc.io-client",
+    "enchilada": "~0.7.1",
+    "deep-equal": "~0.1.2",
+    "events-browserify": "0.0.1",
+    "util": "~0.10.2"
   },
   "engines": {
     "node": "~0.10"

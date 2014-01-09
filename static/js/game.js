@@ -1,75 +1,41 @@
 module.exports = Game;
 
-var eventify = require('./eventify')
-
-function Game(id) {
+function Game(mailroom) {
   var game = this;
   game.$board = $('#board')
-  game._id = id;
-  game._chans = [];
+  game.mailroom = mailroom;
   game.players = {};
-  game.initialize();
 }
 
-eventify(Game);
+//// --- External API
 
-Game.prototype.addChan = function (chan) {
-  var game = this;
-  game._chans.push(chan)
-
-  chan.onmessage = function (pkt) {
-    // console.log('received', pkt)
-    var data;
-    try {
-      var data = JSON.parse(pkt.data)
-    } catch (e) {
-      throw 'Couldnt parse message from data channel ' + pkt
-    }
-    // console.log('got packet', data)
-    game.fire(data.evt, data.msg, data.id)
-
-    chan._id = data.id
-  }
-
-  chan.onclose = function () {
-    if (chan._id) {
-      game.removePlayer(chan._id)
-
-      // remove the channel
-      var index;
-      game._chans.forEach(function (ch, i) {
-        if (ch._id === chan._id) {
-          index = i;
-        }
-      })
-      game._chans.splice(i,1)
-    }
-  }
-
-  game.updateOthers()
+Game.prototype.join = function (id) {
+  this.addPlayer(id)
 }
 
-Game.prototype.send = function (name, msg) {
-  var enc = JSON.stringify({evt:name, msg: msg, id: this._id});
-  // console.log('sending', enc)
-  this._chans.forEach(function (chan) {
-    chan.send(enc)
-  })
+Game.prototype.message = function (msg, id) {
+  this.updatePlayer(id, msg)
 }
 
-//// -------
+Game.prototype.leave = function (id) {
+  this.removePlayer(id)
+}
 
-Game.prototype.initialize = function () {
+Game.prototype.current = function () {
+  return this.players.me.pos
+}
+
+
+//// --- Internal stuff
+
+Game.prototype.start = function () {
   var game = this;
   console.log('starting game!', game._id)
 
   var pos = [Math.floor(Math.random() * game.$board.height()), Math.floor(Math.random() * game.$board.width())];
 
-  game.on('plyr-update', function (ps, id) {
-    game.updatePlayer(id, ps)
-  })
-
-  game.addPlayer('me', pos)
+  game.addPlayer('me')
+  game.updatePlayer('me', pos)
   game.initControls()
   this._interval = setInterval(game.gameLoop.bind(game), 10)
 }
@@ -83,16 +49,20 @@ Game.prototype.removePlayer = function (id) {
 Game.prototype.updatePlayer = function (id, pos) {
   var game = this;
   if (!game.players[id]) {
-    game.addPlayer(id, pos)
+    console.log('Update for player not in system?!')
+    return
   }
   game.players[id].pos = pos
 
   // console.log('after update', id, pos, game.players)
 }
 
-Game.prototype.addPlayer = function (id, pos) {
+Game.prototype.addPlayer = function (id) {
   var game = this;
-  var plyr = {id: id, pos: pos.slice(0)}
+  var plyr = {
+    id: id,
+    pos: [-100, -100],
+  }
   plyr.$ = $('<div>').addClass('player').addClass(id=='me' ? 'me' : 'them').attr('id', id).css({'background-color': '#' + id.slice(id.length - 6)})
 
   game.$board.find('#' + id).remove()
@@ -100,12 +70,7 @@ Game.prototype.addPlayer = function (id, pos) {
 
   game.players[id] = plyr
 
-  console.log('Added player', id, pos, game.players)
-}
-
-Game.prototype.updateOthers = function () {
-  var game = this;
-  game.send('plyr-update', game.players.me.pos)
+  console.log('Added player', id)
 }
 
 Game.prototype.initControls = function () {
@@ -127,22 +92,15 @@ Game.prototype.initControls = function () {
           game.players.me.pos[0] += speed;
           break;
       }
-      game.updateOthers();
     }
-  })
-
-}
-
-Game.prototype.render = function () {
-  var game = this;
-  Object.keys(game.players).forEach(function (id) {
-    var plyr = game.players[id];
-    plyr.$.css({top: plyr.pos[0], left: plyr.pos[1]})
   })
 
 }
 
 Game.prototype.gameLoop = function () {
   var game = this;
-  game.render()
+  Object.keys(game.players).forEach(function (id) {
+    var plyr = game.players[id];
+    plyr.$.css({top: plyr.pos[0], left: plyr.pos[1]})
+  })
 }

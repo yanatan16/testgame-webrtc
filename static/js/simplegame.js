@@ -1,39 +1,67 @@
-var rtc = require('../vendor/webrtc/webrtc.io.js')
+// simplegame.js
+// Glue code to add in a WebRTC as a multiplayer communication layer for web games
+
+// Mailroom is the nice socket.io-like wrapper around WebRTC
+var Mailroom = require('./mailroom')
+
+// Game is our game!
 var Game = require('./game')
 
-rtc.SERVER = function () {
-  return {
-    'iceServers': [
-      {
-        'url': 'stun:stun.l.google.com:19302'
-      }
-    ]
-  };
+// A node module for checking deepEqual
+var deepEqual = require('deep-equal')
+
+// You can customize what room to join, but this just grabs the first path element
+var room = window.document.location.pathname.toString().split('/')[1]
+
+// Startup the mailroom. (It takes options, but we're fine for now)
+var mailroom = new Mailroom(room)
+
+// New Game!
+var game = new Game(mailroom)
+
+// On connect, lets start the game
+mailroom.on('connect', function (my_id) {
+  console.log('connect successful!')
+
+  game.start()
+  startUpdate()
+})
+
+// If theres an error, we'd like to know
+mailroom.on('error', function (err) {
+  console.error('ERROR', err)
+})
+
+// This sets up a state update notification
+// It checks if the state has changed since last notification
+function startUpdate() {
+  var updateInterval = 10 //ms
+  var state
+  setInterval(function () {
+    var newState = game.current() // Get current state
+    if (!deepEqual(newState, state)) {
+      state = newState
+      mailroom.broadcast(state)
+    }
+  }, updateInterval)
 }
 
-$(function () {
-  var host = window.document.location.host.replace(/:.*/, '')
-  var game
+// Here's the magic, a peer has just joined
+mailroom.on('join', function (peer) {
 
-  rtc.connect('ws://' + host + ':8000', 'testroom')
+  // Notify the game
+  game.join(peer.id)
 
-  rtc.on('connect', function () {
-    console.log('made websocket connection')
+  // On any message from the peer, lets notify the game
+  peer.on('message', function (msg, from) {
+    game.message(msg, from.id)
   })
 
-  rtc.on('connections', function (conns) {
-    console.log('got connections', conns)
-    game = new Game(rtc._me)
-    rtc.fire('ready')
+  // If the peer leaves, notify the game
+  peer.on('leave', function () {
+    game.leave(peer.id)
   })
 
-  rtc.on('data stream open', function (chan) {
-    console.log('data stream open!')
-
-    game.addChan(chan)
-  })
-
-  rtc.on('data stream error', function (err) {
-    throw err
-  })
+  // Send the peer our last updated state on initialization
+  peer.send(game.current())
 })
