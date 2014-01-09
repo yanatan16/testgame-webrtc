@@ -2,8 +2,7 @@ var express = require('express')
   , http = require('http')
   , path = require('path')
 
-var port = process.env.port || 8000
-  wsport = process.env.wsport || 8101
+var port = process.env.PORT || 8000
 
 var app = express();
 
