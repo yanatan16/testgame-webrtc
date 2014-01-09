@@ -1,52 +1,24 @@
 module.exports = Game;
 
-function Game(chan) {
-  this.ps = [$('#plyr1'), $('#plyr2')];
-  this.me = 0, this.them = 0;
-  this.chan = chan;
-  this.listen();
-}
+var eventify = require('./eventify')
 
-Game.prototype.start = function () {
+function Game(id) {
   var game = this;
-  console.log('starting game!')
-  game.select();
-
-  game.on('players-set', function () {
-    game.initBoard()
-    game.initControls()
-    game.gameLoop()
-  })
+  game.$board = $('#board')
+  game._id = id;
+  game._chans = [];
+  game.players = {};
+  game.initialize();
 }
 
-// Holds callbacks for certain events.
-Game.prototype._events = {};
+eventify(Game);
 
-Game.prototype.on = function(eventName, callback) {
-  this._events[eventName] = this._events[eventName] || [];
-  this._events[eventName].push(callback);
-};
-
-Game.prototype.fire = function(eventName, _) {
-  var events = this._events[eventName];
-  var args = Array.prototype.slice.call(arguments, 1);
-
-  if (!events) {
-    return;
-  }
-
-  for (var i = 0, len = events.length; i < len; i++) {
-    events[i].apply(null, args);
-  }
-};
-
-Game.prototype.send = function (name, msg) {
-  this.chan.send(JSON.stringify({evt:name, msg: msg}))
-}
-
-Game.prototype.listen = function () {
+Game.prototype.addChan = function (chan) {
   var game = this;
-  game.chan.onmessage = function (pkt) {
+  game._chans.push(chan)
+
+  chan.onmessage = function (pkt) {
+    // console.log('received', pkt)
     var data;
     try {
       var data = JSON.parse(pkt.data)
@@ -54,38 +26,86 @@ Game.prototype.listen = function () {
       throw 'Couldnt parse message from data channel ' + pkt
     }
     // console.log('got packet', data)
-    game.fire(data.evt, data.msg)
+    game.fire(data.evt, data.msg, data.id)
+
+    chan._id = data.id
   }
-}
 
-Game.prototype.select = function () {
-  var game = this;
-  var randomValue = Math.random();
+  chan.onclose = function () {
+    if (chan._id) {
+      game.removePlayer(chan._id)
 
-  game.on('selected', function (value) {
-    if (randomValue < parseFloat(value)) {
-      game.me = 1, game.them = 2;
-    } else {
-      game.me = 2, game.them = 1;
+      // remove the channel
+      var index;
+      game._chans.forEach(function (ch, i) {
+        if (ch._id === chan._id) {
+          index = i;
+        }
+      })
+      game._chans.splice(i,1)
     }
-    game.me = {id:game.me, $: game.ps[game.me - 1]}
-    game.them = {id:game.them, $: game.ps[game.them - 1]}
-    console.log('players set!', game.me, game.them)
-    game.fire('players-set', {me: game.me.id, them: game.them.id})
-  })
-  game.send('selected', randomValue)
+  }
+
+  game.updateOthers()
 }
 
-Game.prototype.initBoard = function () {
-  var game = this;
-  game.me.pos = initPos(game.me.id)
-  game.them.pos = initPos(game.them.id)
-  game.me.$.addClass('me')
-  game.them.$.addClass('them')
+Game.prototype.send = function (name, msg) {
+  var enc = JSON.stringify({evt:name, msg: msg, id: this._id});
+  // console.log('sending', enc)
+  this._chans.forEach(function (chan) {
+    chan.send(enc)
+  })
+}
 
-  function initPos(id) {
-    return [100, 100 + 400 * (id - 1)]
+//// -------
+
+Game.prototype.initialize = function () {
+  var game = this;
+  console.log('starting game!', game._id)
+
+  var pos = [Math.floor(Math.random() * game.$board.height()), Math.floor(Math.random() * game.$board.width())];
+
+  game.on('plyr-update', function (ps, id) {
+    game.updatePlayer(id, ps)
+  })
+
+  game.addPlayer('me', pos)
+  game.initControls()
+  this._interval = setInterval(game.gameLoop.bind(game), 10)
+}
+
+Game.prototype.removePlayer = function (id) {
+  var game = this;
+  game.players[id].$.remove()
+  delete game.players[id]
+}
+
+Game.prototype.updatePlayer = function (id, pos) {
+  var game = this;
+  if (!game.players[id]) {
+    game.addPlayer(id, pos)
   }
+  game.players[id].pos = pos
+
+  // console.log('after update', id, pos, game.players)
+}
+
+Game.prototype.addPlayer = function (id, pos) {
+  var game = this;
+  var plyr = {id: id, pos: pos.slice(0)}
+  plyr.$ = $('<div>').addClass('player').addClass(id=='me' ? 'me' : 'them').attr('id', id).css({'background-color': '#' + id.slice(id.length - 6)})
+
+  game.$board.find('#' + id).remove()
+  game.$board.append(plyr.$)
+
+  game.players[id] = plyr
+
+  console.log('Added player', id, pos, game.players)
+}
+
+Game.prototype.updateOthers = function () {
+  var game = this;
+  game.send('plyr-update', game.players.me.pos)
 }
 
 Game.prototype.initControls = function () {
@@ -95,37 +115,34 @@ Game.prototype.initControls = function () {
     if (evt.which >= 37 && evt.which <= 40) {
       switch (evt.which) {
         case 37:
-          game.me.pos[1] -= speed;
+          game.players.me.pos[1] -= speed;
           break
         case 38:
-          game.me.pos[0] -= speed;
+          game.players.me.pos[0] -= speed;
           break;
         case 39:
-          game.me.pos[1] += speed;
+          game.players.me.pos[1] += speed;
           break;
         case 40:
-          game.me.pos[0] += speed;
+          game.players.me.pos[0] += speed;
           break;
       }
-      game.send('update', game.me.pos)
+      game.updateOthers();
     }
   })
 
-  game.on('update', function (otherpos) {
-    game.them.pos = otherpos
-  })
 }
 
 Game.prototype.render = function () {
   var game = this;
-  renderObj(game.me)
-  renderObj(game.them)
+  Object.keys(game.players).forEach(function (id) {
+    var plyr = game.players[id];
+    plyr.$.css({top: plyr.pos[0], left: plyr.pos[1]})
+  })
 
-  function renderObj(obj) {
-    obj.$.css({top: obj.pos[0], left: obj.pos[1]})
-  }
 }
 
 Game.prototype.gameLoop = function () {
-  this._interval = setInterval(this.render.bind(this), 10 /* 24 fps */)
+  var game = this;
+  game.render()
 }
