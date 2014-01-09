@@ -11,7 +11,8 @@
   "dependencies": {
     "express": "~3.4.7",
     "webrtc.io": "0.0.4",
-    "webrtc.io-client": "0.0.2-3"
+    "webrtc.io-client": "0.0.2-3",
+    "enchilada": "~0.7.1"
   },
   "engines": {
     "node": "~0.10"

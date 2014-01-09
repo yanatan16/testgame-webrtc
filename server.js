@@ -7,6 +7,9 @@ var port = process.env.PORT || 8000
 var app = express();
 
 app.use(express.logger('dev'))
+  .use(require('enchilada')({
+    src: path.join(__dirname, 'static'),
+  }))
   .use(express.static(path.join(__dirname, 'static')))
 
 
