@@ -1,6 +1,4 @@
-if (!rtc.dataChannelSupport) {
-  throw 'no data channel support!'
-}
+rtc.SERVER = function () {return null;}
 
 $(function () {
   var host = window.document.location.host.replace(/:.*/, '')
