@@ -1,9 +1,8 @@
 module.exports = Game;
 
-function Game(mailroom) {
+function Game() {
   var game = this;
   game.$board = $('#board')
-  game.mailroom = mailroom;
   game.players = {};
 }
 

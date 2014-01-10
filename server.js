@@ -10,8 +10,7 @@ app.use(express.logger('dev'))
   .use(require('enchilada')({
     src: path.join(__dirname, 'static'),
     routes: {
-      // '/mailroom/webrtc.io.js': './vendor/webrtc/webrtc.io.js',
-      // '/mailroom/mailroom.js': './js/mailroom.js'
+      '/tethr.io.js': 'tethr.io'
     }
   }))
   .use(express.static(path.join(__dirname, 'static')))
